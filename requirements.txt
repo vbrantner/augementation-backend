@@ -1,0 +1,3 @@
+ruff
+opencv-python
+opencv-contrib-python
