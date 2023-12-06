@@ -2,7 +2,7 @@ import cv2
 import time
 
 # Initialize the camera
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture("/dev/video0")
 
 if not cap.isOpened():
     print("Cannot open camera")
@@ -24,6 +24,7 @@ try:
 
         # Save the frame
         cv2.imwrite(filename, frame)
+        print("took image")
 
         # Wait for 3 seconds
         time.sleep(3)

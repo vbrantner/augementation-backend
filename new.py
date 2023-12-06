@@ -2,7 +2,6 @@ import asyncio
 import base64
 import json
 import pickle
-
 import cv2
 import cv2.aruco as aruco
 import numpy as np
@@ -18,14 +17,17 @@ aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_100)
 parameters = aruco.DetectorParameters()
 
 # Video capture setup
-video_device = "/dev/video0"
-cap = cv2.VideoCapture(0)
+video_device = "/dev/video2"
+cap = cv2.VideoCapture(video_device)
 cap.set(3, 800)  # Width
 cap.set(4, 600)  # Height
 
 # Constants
 max_distance = 0.1
 marker_size = 0.01
+
+# Choose the index of the corner to use (0, 1, 2, or 3)
+chosen_corner_index = 0
 
 
 def map_to_3d_space(center_x, center_y, image_width, image_height, tvec):
@@ -56,26 +58,48 @@ async def send_data(websocket, path):
                 rvecs, tvecs, _ = aruco.estimatePoseSingleMarkers(
                     corners, marker_size, camera_matrix, distortion_coefficients
                 )
-                for rvec, tvec in zip(rvecs, tvecs):
+
+                # Choose the index of the corner to use (0, 1, 2, or 3)
+                chosen_corner_index = 0
+
+                for i, (rvec, tvec) in enumerate(zip(rvecs, tvecs)):
+                    # Get the coordinates of the chosen corner
+                    corner_coord = corners[i][0][chosen_corner_index]
+
+                    # Compute the 3D position of the corner in the marker's coordinate system
+                    corner_3d = np.array(
+                        [
+                            [
+                                corner_coord[0] - marker_size / 2,
+                                corner_coord[1] - marker_size / 2,
+                                0,
+                            ]
+                        ]
+                    )
+
+                    # Adjust the translation vector
+                    tvec_adjusted = tvec + corner_3d
+
+                    # Draw the axes using the adjusted translation vector
                     frame = cv2.drawFrameAxes(
                         frame,
                         camera_matrix,
                         distortion_coefficients,
                         rvec,
-                        tvec,
+                        tvec_adjusted,
                         marker_size,
                     )
+
                 rotation_matrix, _ = cv2.Rodrigues(rvecs[0])
                 rotation = Rotation.from_matrix(rotation_matrix)
                 quaternion = rotation.as_quat()
 
                 corner_points = corners[0][0]
-                print(corner_points[0])
                 center_x = int(sum([point[0] for point in corner_points]) / 4)
                 center_y = int(sum([point[1] for point in corner_points]) / 4)
 
                 x_normalized, y_normalized, z_depth = map_to_3d_space(
-                    corner_points[3][0], corner_points[3][1], 800, 600, tvecs
+                    center_x, center_y, 800, 600, tvecs
                 )
 
                 data["quaternion"] = quaternion.tolist()
@@ -94,7 +118,6 @@ async def send_data(websocket, path):
 
 
 async def start_server():
-    print("try to start server")
     server = await websockets.serve(send_data, "", 8765)
     await server.wait_closed()
 
